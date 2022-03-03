@@ -1,0 +1,33 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class VidaeDano : MonoBehaviour
+{
+    public int Vida;
+
+    // Start is called before the first frame update
+    void Start()
+    {
+        
+
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        
+    }
+    public void OnTriggerEnter2D(Collider2D collider ){
+        if(collider.gameObject.tag == "DanoPersonagem")
+        {
+            Vida--;
+        }
+    }
+    void Morte(){
+        if(Vida == 0)
+        {
+            Object.Destroy(this.gameObject)
+        }
+    }
+}
