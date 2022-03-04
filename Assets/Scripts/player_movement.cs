@@ -6,15 +6,14 @@ using UnityEngine;
 public class player_movement : MonoBehaviour
 {
     public Animator animator; //Animator ligado ao player.
-    private Rigidbody2D rb; //Rigidbody2D associado ao player
-
+    private Rigidbody2D rb; //Rigidbody2D associado ao player.
+    [SerializeField] public BoxCollider2D player_collider;
     //Move variables
     [SerializeField] private float speed = 4f;
     private float move_input;
 
     //Jump variables
     [SerializeField] private float jump_force = 6f;
-    private bool is_grounded;
     private float coyote_time = 0.1f;
     private float coyote_time_counter;
     private float jump_buffer_time = 0.1f;
@@ -22,29 +21,51 @@ public class player_movement : MonoBehaviour
     private float count_jump_timer;
     [SerializeField] private float jump_time = 0.3f;
     private bool is_jumping;
-    public Transform feet_position; //GameObject nos péss do player para verificar o chão.
-    private float check_radius = 0.2f;
     public LayerMask what_is_ground; //Layer para setar o chão.
 
     //Crouch variables
     public Transform check_overhead_colision; //GameObject na cabeçaa do player para verificar se tem algo sólido em cima.
     private float overhead_radius = 0.2f;
-    private bool chrouch_sinalizator;
-    public Collider2D not_chrouching; //Colisor normal do player.
-    public Collider2D chrouching; //Colisor menor para quando o player agachar.
+    public bool is_crouching { get; private set; }
+    private float crouch_hight_percent = 0.5f;
+    private Vector2 standing_collider_size;
+    private Vector2 standing_collider_offset;
+    private Vector2 crouch_collider_size;
+    private Vector2 crouch_collider_offset;
+
+    //Atack
+    public static bool is_atacking;
+
+    Hud_control hud;
+
+    //Seringas
+    public static int coleted_seringas = 0;
+
+    //Lifes
+    [SerializeField] public static int life = 3;
 
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
         animator = GetComponent<Animator>();
         //Time.timeScale = 0.3f; //Para testar as animações
+
+        hud = Hud_control.hud;
     }
     void Update()
     {
         animations();
-        is_grounded = Physics2D.OverlapCircle(feet_position.position, check_radius, what_is_ground);
         look_direction();
         jump();
+        atack();
+    }
+    private void Awake()
+    {
+        standing_collider_size = player_collider.size;
+        standing_collider_offset = player_collider.offset;
+
+        crouch_collider_size = new Vector2(standing_collider_size.x, standing_collider_size.y * crouch_hight_percent);
+        crouch_collider_offset = new Vector2(standing_collider_offset.x, standing_collider_offset.y * crouch_hight_percent);
     }
     void FixedUpdate()
     {
@@ -52,11 +73,18 @@ public class player_movement : MonoBehaviour
         move();
     }
 
+    private bool isGrounded()
+    {
+        RaycastHit2D ground = Physics2D.BoxCast(player_collider.bounds.center, player_collider.bounds.size, 0, Vector2.down, 0.1f, what_is_ground);
+
+        return ground.collider != null;
+    }
+
     void move()
     {
         move_input = Input.GetAxisRaw("Horizontal");
         //Verificando se o player está agachado, se tiver, diminui a velocidade pela metade.
-        if(!chrouch_sinalizator || is_jumping == true)
+        if (!is_crouching || is_jumping == true)
             rb.velocity = new Vector2(move_input * speed, rb.velocity.y);
         else
             rb.velocity = new Vector2(move_input * (speed / 2), rb.velocity.y);
@@ -68,20 +96,17 @@ public class player_movement : MonoBehaviour
         if (coyote_time_counter > 0f && jump_buffer_time_counter > 0f)
         {
             is_jumping = true;
-            chrouch_sinalizator = false;
+            is_crouching = false;
             count_jump_timer = jump_time;
             rb.velocity = Vector2.up * jump_force;
             jump_buffer_time_counter = 0f;
         }
-        if(is_grounded)
-        {
+        if (isGrounded())
             coyote_time_counter = coyote_time;
-        }
         else
-        {
             coyote_time_counter -= Time.deltaTime;
-        }
-        if(Input.GetKeyDown(KeyCode.Space))
+
+        if (Input.GetKeyDown(KeyCode.Space))
         {
             jump_buffer_time_counter = jump_buffer_time;
         }
@@ -98,9 +123,7 @@ public class player_movement : MonoBehaviour
                 count_jump_timer -= Time.deltaTime;
             }
             else
-            {
                 is_jumping = false;
-            }
         }
         if (Input.GetKeyUp(KeyCode.Space))
         {
@@ -108,30 +131,46 @@ public class player_movement : MonoBehaviour
             coyote_time_counter = 0f;
         }
     }
+    void atack()
+    {
+        if(Input.GetMouseButtonDown(0) && isGrounded())
+        {
+            is_atacking = true;
+        }
+        else
+        {
+            is_atacking = false;
+        }
+        if(Input.GetMouseButtonUp(0))
+        {
+            is_atacking = false;
+        }
+    }
 
     void crouch()
     {
         //Setando S como botão para agachar e iniciando sinalizador de agachamento.
-        if(Input.GetKey(KeyCode.S))
+        if (Input.GetKey(KeyCode.S))
         {
-            chrouch_sinalizator = true;
+            is_crouching = true;
+            player_collider.size = crouch_collider_size;
+            player_collider.offset = crouch_collider_offset;
         }
         else
         {
-            chrouch_sinalizator = false;
+            is_crouching = false;
+            player_collider.size = standing_collider_size;
+            player_collider.offset = standing_collider_offset;
         }
 
-        //Trocando o colisor normal pelo colisor menor quando o sinalizador de agachamento for positivo.
-        not_chrouching.enabled = !chrouch_sinalizator;
-        chrouching.enabled = chrouch_sinalizator;
-
         //Checando se quando o player for levantar, vai ter algo sólido em cima, se tiver, mantém o estado de agachado.
-        if(chrouching.enabled == false)
+        if (is_crouching == false && isGrounded())
         {
-            if(Physics2D.OverlapCircle(check_overhead_colision.position, overhead_radius, what_is_ground)) 
+            if (Physics2D.OverlapCircle(check_overhead_colision.position, overhead_radius, what_is_ground))
             {
-                not_chrouching.enabled = false;
-                chrouching.enabled = true;
+                is_crouching = true;
+                player_collider.size = crouch_collider_size;
+                player_collider.offset = crouch_collider_offset;
             }
         }
     }
@@ -140,20 +179,18 @@ public class player_movement : MonoBehaviour
     {
         //Flipando player de acordo com a direção.
         if (move_input > 0)
-        {
             transform.eulerAngles = new Vector3(0, 0, 0);
-        }
         else if (move_input < 0)
-        {
             transform.eulerAngles = new Vector3(0, 180, 0);
-        }
     }
 
     void animations()
     {
         animator.SetFloat("horizontal_move", Mathf.Abs(move_input));
-        animator.SetBool("is_grounded", is_grounded);
+        animator.SetBool("is_grounded", isGrounded());
         animator.SetBool("Is_jumping", is_jumping);
+        animator.SetBool("is_crouching", is_crouching);
+        animator.SetBool("atack", is_atacking);
 
         animator.SetFloat("vertical_move", rb.velocity.y);
     }
